@@ -15,34 +15,42 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // 1. AUTENTICACIÓN REAL CON SUPABASE
-      const { data, error } = await supabase.auth.signInWithPassword({
+      // 1. Iniciar sesión en Supabase Auth
+      const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
-      if (error) throw error;
+      if (authError) throw authError;
 
-      // 2. LÓGICA DE REDIRECCIÓN (ROLES)
-      // En el futuro esto vendrá de la base de datos (tabla 'perfiles').
-      // Por ahora, lo hacemos verificando el correo:
-      
-      const userEmail = data.user.email;
+      // 2. Verificar el ROL en la tabla 'profiles'
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
 
-      if (userEmail === 'admin@sistema.com') {
-        // El dueño va al panel administrativo
-        navigate('/admin');
-      } else if (userEmail === 'oficina@sistema.com') {
-        // El encargado también usa panel de escritorio (podríamos crear /admin/oficina luego)
-        navigate('/admin'); 
-      } else {
-        // Los cobradores (y otros) van a la App Móvil
-        navigate('/');
+      if (profileError) throw new Error("No se pudo verificar el rol del usuario.");
+
+      // 3. Redirección Inteligente
+      switch (profile.role) {
+        case 'super-admin':
+          // El Dueño va al Dashboard completo
+          navigate('/admin');
+          break;
+        case 'admin-oficina':
+          // El Admin de Oficina también va al panel (podrías restringir vistas luego)
+          navigate('/admin'); 
+          break;
+        case 'cobrador':
+        default:
+          // Cobradores van a la App Móvil
+          navigate('/');
+          break;
       }
       
     } catch (err) {
-      setError('Error de acceso: Credenciales inválidas');
-      console.error(err);
+      setError('Error de acceso: ' + (err.message || 'Credenciales inválidas'));
     } finally {
       setLoading(false);
     }
@@ -60,36 +68,32 @@ export default function Login() {
             Sistema JR
           </h2>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Ingresa tus credenciales
+            Ingreso Seguro
           </p>
         </div>
 
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
           <div className="rounded-md space-y-4">
-            <div>
-              <input
-                type="email"
-                required
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                placeholder="Correo electrónico"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <input
-                type="password"
-                required
-                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
-                placeholder="Contraseña"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
+            <input
+              type="email"
+              required
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              placeholder="Correo electrónico"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+            <input
+              type="password"
+              required
+              className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none"
+              placeholder="Contraseña"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
           </div>
 
           {error && (
-            <div className="text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900">
+            <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-lg border border-red-100">
               {error}
             </div>
           )}
@@ -97,17 +101,11 @@ export default function Login() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition-all active:scale-95 disabled:opacity-50"
           >
             {loading ? 'Verificando...' : 'Iniciar Sesión'}
           </button>
         </form>
-
-        {/* AYUDA VISUAL (Opcional, bórralo cuando termines de probar) */}
-        <div className="text-xs text-center text-gray-400 mt-4">
-          <p>Usuarios sugeridos (Crear en Supabase):</p>
-          <p>admin@sistema.com / oficina@sistema.com / cobrador@sistema.com</p>
-        </div>
       </div>
     </div>
   );

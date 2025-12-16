@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { supabase } from '../supabase/client'; // Importamos supabase para el logout real
+import { useNavigate, Outlet } from 'react-router-dom'; // <--- OJO: Outlet es vital aquí
+import { supabase } from '../supabase/client';
 
-export default function AdminLayout({ children, title, role }) {
+export default function AdminLayout({ title, role }) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const navigate = useNavigate();
 
@@ -19,7 +19,7 @@ export default function AdminLayout({ children, title, role }) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             
-            {/* LOGO E IDENTIDAD */}
+            {/* LOGO */}
             <div className="flex items-center gap-2">
               <div className="bg-indigo-600 text-white p-1.5 rounded-lg font-bold text-lg">JR</div>
               <div className="flex flex-col">
@@ -30,12 +30,11 @@ export default function AdminLayout({ children, title, role }) {
 
             {/* MENÚ DE ESCRITORIO */}
             <div className="hidden md:flex items-center space-x-6">
-              {/* Botón rápido para crear usuarios */}
               <button 
                 onClick={() => navigate('/admin/crear-usuario')}
-                className="text-sm font-medium text-indigo-600 hover:text-indigo-800 flex items-center gap-1 bg-indigo-50 px-3 py-1.5 rounded-md transition-colors"
+                className="text-sm font-medium text-indigo-600 hover:text-indigo-800 bg-indigo-50 px-3 py-1.5 rounded-md transition-colors"
               >
-                <span>+</span> Usuarios
+                + Usuarios
               </button>
 
               <div className="h-6 w-px bg-gray-300"></div>
@@ -44,27 +43,19 @@ export default function AdminLayout({ children, title, role }) {
               
               <button 
                 onClick={handleLogout}
-                className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg transition-colors border border-gray-200"
+                className="text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg border border-gray-200 transition-colors"
               >
                 Cerrar Sesión
               </button>
             </div>
 
-            {/* BOTÓN MENÚ MÓVIL (Hamburgesa) */}
+            {/* BOTÓN MENÚ MÓVIL */}
             <div className="md:hidden">
               <button 
                 onClick={() => setIsMenuOpen(!isMenuOpen)}
                 className="p-2 rounded-md text-gray-500 hover:bg-gray-100 focus:outline-none"
               >
-                {isMenuOpen ? (
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                ) : (
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                  </svg>
-                )}
+                {isMenuOpen ? '✖' : '☰'}
               </button>
             </div>
           </div>
@@ -80,9 +71,6 @@ export default function AdminLayout({ children, title, role }) {
               >
                 + Crear Nuevo Usuario
               </button>
-              <p className="px-3 py-2 text-sm text-gray-500 border-t border-gray-100 mt-2">
-                Vista: {title}
-              </p>
               <button 
                 onClick={handleLogout}
                 className="w-full text-left block px-3 py-2 text-base font-medium text-red-600 hover:bg-red-50 rounded-md"
@@ -95,8 +83,9 @@ export default function AdminLayout({ children, title, role }) {
       </header>
 
       {/* --- CONTENIDO PRINCIPAL --- */}
+      {/* AQUÍ ESTABA EL ERROR: Necesitamos Outlet para que se vean las rutas hijas */}
       <main className="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {children}
+        <Outlet /> 
       </main>
 
     </div>

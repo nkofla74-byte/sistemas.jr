@@ -1,126 +1,106 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, CheckCircle, Circle, MapPin, Save, Zap, ArrowUpDown, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, CheckCircle, Circle, MapPin, Save, Zap, AlertTriangle } from 'lucide-react';
+import { supabase } from '../supabase/client';
 
 const GestionarRuta = () => {
   const navigate = useNavigate();
   const [clientes, setClientes] = useState([]);
+  const [loading, setLoading] = useState(true);
   
-  // Ubicación del Cobrador (Simulada o Real)
-  // En un caso real, usarías navigator.geolocation aquí.
-  // Usamos un punto central simulado (ej. Plaza Central)
+  // Ubicación inicial (Simulada para referencia del algoritmo)
   const [miUbicacion] = useState({ lat: -12.046374, lng: -77.042793 }); 
 
-  // 1. CARGAR CLIENTES Y AGREGAR DATOS GPS SIMULADOS
+  // 1. CARGAR CLIENTES REALES DESDE SUPABASE
   useEffect(() => {
-    // Mock DB con GPS añadido para probar el algoritmo
-    const datosBase = [
-      { id: 1, name: 'María Gómez', address: 'Mercado Central', dailyQuota: 50, gps: { lat: -12.048, lng: -77.043 }, priority: 0 },
-      { id: 2, name: 'Juan Pérez', address: 'Av. Libertador', dailyQuota: 40, gps: { lat: -12.055, lng: -77.050 }, priority: 0 }, // Lejos
-      { id: 3, name: 'Bodega El Chavo', address: 'Calle 8', dailyQuota: 150, gps: { lat: -12.049, lng: -77.044 }, priority: 0 }, // Cerca a María
-      { id: 4, name: 'Carlos Ruiz', address: 'Zona Norte', dailyQuota: 30, gps: { lat: -12.030, lng: -77.030 }, priority: 0 }, // Muy lejos
-    ];
-    
-    // Leer nuevos de memoria
-    const nuevosStorage = JSON.parse(localStorage.getItem('nuevos_clientes') || '[]');
-    const nuevosAdaptados = nuevosStorage.map(c => ({
-      id: c.id,
-      name: c.nombre,
-      address: c.direccion,
-      dailyQuota: Number(c.cuota),
-      gps: c.gps, // Los nuevos SÍ tienen GPS real si lo capturaste
-      priority: 0 // Prioridad por defecto
-    }));
+    const fetchClients = async () => {
+      try {
+        // Pedimos Clientes + su Crédito activo
+        const { data, error } = await supabase
+          .from('clientes')
+          .select('*, creditos(cuota_diaria, saldo_pendiente)');
 
-    // Combinamos y añadimos un estado 'selected' interno para manejar la UI
-    const todos = [...nuevosAdaptados, ...datosBase].map(c => ({
-      ...c,
-      selected: false,
-      tempOrder: 999 // Orden visual
-    }));
+        if (error) throw error;
 
-    setClientes(todos);
+        // Transformamos para que el algoritmo entienda los datos
+        const clientesAdaptados = data.map(c => {
+            const credito = c.creditos && c.creditos.length > 0 ? c.creditos[0] : {};
+            return {
+                id: c.id,
+                name: c.nombre,
+                address: c.direccion,
+                dailyQuota: credito.cuota_diaria || 0,
+                debt: credito.saldo_pendiente || 0,
+                gps: c.gps, // Asumimos que c.gps ya es un objeto JSON {lat, lng}
+                selected: false,
+                tempOrder: 999
+            };
+        });
 
-    // Intentar recuperar selección previa
-    const idsGuardados = JSON.parse(localStorage.getItem('ruta_actual_ids') || '[]');
-    if (idsGuardados.length > 0) {
-      setClientes(prev => prev.map(c => 
-        idsGuardados.includes(c.id) ? { ...c, selected: true } : c
-      ));
-    }
+        // Recuperar selección previa si existe
+        const idsGuardados = JSON.parse(localStorage.getItem('ruta_actual_ids') || '[]');
+        const listaFinal = clientesAdaptados.map(c => 
+            idsGuardados.includes(c.id) ? { ...c, selected: true } : c
+        );
+
+        setClientes(listaFinal);
+      } catch (err) {
+        console.error("Error fetch ruta:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClients();
   }, []);
 
-  // --- LÓGICA DE ALGORITMO DE RUTAS ---
-
-  // Fórmula de distancia (Haversine simplificado o Euclidiana plana para distancias cortas)
+  // --- LÓGICA DE ALGORITMO DE RUTAS (Mantenida igual) ---
   const getDistancia = (p1, p2) => {
-    if (!p1 || !p2) return 99999999; // Distancia infinita si falta GPS
-    const R = 6371e3; // Radio tierra metros
+    if (!p1 || !p2) return 99999999; 
+    const R = 6371e3; 
     const lat1 = p1.lat * Math.PI/180;
     const lat2 = p2.lat * Math.PI/180;
     const dLat = (p2.lat - p1.lat) * Math.PI/180;
     const dLon = (p2.lng - p1.lng) * Math.PI/180;
     const a = Math.sin(dLat/2) * Math.sin(dLat/2) + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return R * c; // Distancia en metros
+    return R * c; 
   };
 
-  // ALGORITMO VECINO MÁS CERCANO (Nearest Neighbor)
   const optimizarRutaAutomatica = () => {
-    // 1. Filtramos solo los seleccionados
     let pool = clientes.filter(c => c.selected);
     const noSeleccionados = clientes.filter(c => !c.selected);
     
     if (pool.length < 2) return alert("Selecciona al menos 2 clientes para optimizar.");
 
     let rutaOrdenada = [];
-    let puntoActual = miUbicacion; // Empezamos desde la ubicación del cobrador (o la oficina)
+    let puntoActual = miUbicacion; 
 
-    // 2. Bucle del algoritmo
     while (pool.length > 0) {
-      // Ordenar el 'pool' restante basado en distancia al 'puntoActual'
       pool.sort((a, b) => {
         const distA = getDistancia(puntoActual, a.gps);
         const distB = getDistancia(puntoActual, b.gps);
         return distA - distB;
       });
-
-      // 3. El más cercano es el primero después del sort
       const masCercano = pool[0];
-      
-      // Lo añadimos a la ruta final
       rutaOrdenada.push(masCercano);
-      
-      // Ese cliente se vuelve el nuevo punto de partida
       if (masCercano.gps) puntoActual = masCercano.gps;
-
-      // Lo quitamos del pool de pendientes
-      pool.shift(); // Elimina el primero (el que acabamos de tomar)
+      pool.shift(); 
     }
 
-    // 4. Actualizamos la lista principal con el nuevo orden
-    // Reconstruimos el array: Primero los ordenados, luego los no seleccionados
     const nuevaLista = [...rutaOrdenada, ...noSeleccionados];
-    
-    // Asignamos prioridades visuales (1, 2, 3...)
     const listaConPrioridad = nuevaLista.map((c, index) => ({
         ...c,
-        // Si es parte de la ruta ordenada, su orden es index + 1
-        // Si no, lo dejamos en 999
         tempOrder: rutaOrdenada.find(r => r.id === c.id) ? index + 1 : 999
     }));
 
     setClientes(listaConPrioridad);
-    alert(`⚡ ¡Ruta Optimizada!\nSe ordenaron ${rutaOrdenada.length} clientes por cercanía.`);
   };
-
-  // --- MANEJADORES DE INTERACCIÓN ---
 
   const toggleSeleccion = (id) => {
     setClientes(prev => prev.map(c => {
       if (c.id === id) {
         const nuevoEstado = !c.selected;
-        // Si se selecciona, le damos el siguiente número de prioridad disponible
         const maxOrder = prev.filter(x => x.selected).length; 
         return { ...c, selected: nuevoEstado, tempOrder: nuevoEstado ? maxOrder + 1 : 999 };
       }
@@ -128,21 +108,12 @@ const GestionarRuta = () => {
     }));
   };
 
-  // Cambio manual de prioridad (Input numérico)
   const handlePriorityChange = (id, nuevoValor) => {
     const val = parseInt(nuevoValor) || 0;
-    setClientes(prev => {
-        const lista = prev.map(c => c.id === id ? { ...c, tempOrder: val } : c);
-        // Opcional: Reordenar visualmente al momento
-        return lista.sort((a, b) => {
-            if (a.selected && b.selected) return a.tempOrder - b.tempOrder;
-            return b.selected ? 1 : -1; 
-        });
-    });
+    setClientes(prev => prev.map(c => c.id === id ? { ...c, tempOrder: val } : c));
   };
 
   const handleGuardarRuta = () => {
-    // Filtramos seleccionados y los ordenamos por la prioridad que tenga (manual o auto)
     const seleccionadosOrdenados = clientes
       .filter(c => c.selected)
       .sort((a, b) => a.tempOrder - b.tempOrder);
@@ -151,11 +122,9 @@ const GestionarRuta = () => {
 
     localStorage.setItem('ruta_actual_ids', JSON.stringify(ids));
     localStorage.setItem('ruta_actual_data', JSON.stringify(seleccionadosOrdenados));
-
     navigate('/ruta');
   };
 
-  // Contadores para UI
   const countSeleccionados = clientes.filter(c => c.selected).length;
 
   return (
@@ -163,7 +132,6 @@ const GestionarRuta = () => {
       
       {/* HEADER */}
       <div className="sticky top-0 bg-white/90 dark:bg-zinc-900/90 backdrop-blur p-4 border-b border-slate-200 dark:border-zinc-800 flex flex-col gap-3 z-20 shadow-sm">
-        
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => navigate(-1)} className="p-2 bg-slate-100 dark:bg-zinc-800 rounded-full hover:bg-slate-200 transition-colors">
@@ -178,25 +146,23 @@ const GestionarRuta = () => {
             {countSeleccionados} Visitas
           </div>
         </div>
-
-        {/* BOTÓN ALGORITMO (OPTIMIZAR) */}
         {countSeleccionados > 1 && (
             <button 
                 onClick={optimizarRutaAutomatica}
-                className="w-full py-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all animate-pulse-slow"
+                className="w-full py-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300 font-bold rounded-xl flex items-center justify-center gap-2 active:scale-95 transition-all"
             >
                 <Zap size={18} className="fill-indigo-500 text-indigo-500" />
-                OPTIMIZAR RUTA AUTOMÁTICAMENTE
+                OPTIMIZAR RUTA
             </button>
         )}
       </div>
 
       {/* LISTA DE CLIENTES */}
       <div className="p-4 space-y-3">
-        {/* Renderizamos primero los seleccionados ordenados, luego el resto */}
+        {loading && <div className="text-center text-slate-400">Cargando clientes...</div>}
+        
         {clientes
             .sort((a, b) => {
-                // Lógica visual: Seleccionados arriba, ordenados por tempOrder
                 if (a.selected === b.selected) return a.tempOrder - b.tempOrder;
                 return a.selected ? -1 : 1;
             })
@@ -210,7 +176,6 @@ const GestionarRuta = () => {
                   : 'bg-slate-50 dark:bg-zinc-950 border-transparent opacity-80 hover:opacity-100'}
               `}
             >
-              {/* 1. CHECKBOX */}
               <div onClick={() => toggleSeleccion(cliente.id)} className="cursor-pointer">
                 <div className={`
                   flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-colors
@@ -220,7 +185,6 @@ const GestionarRuta = () => {
                 </div>
               </div>
 
-              {/* 2. INFO CLIENTE */}
               <div className="flex-1 min-w-0 cursor-pointer" onClick={() => toggleSeleccion(cliente.id)}>
                 <h3 className={`font-bold text-sm truncate ${cliente.selected ? 'text-slate-800 dark:text-white' : 'text-slate-500 dark:text-zinc-500'}`}>
                   {cliente.name}
@@ -235,11 +199,10 @@ const GestionarRuta = () => {
                             <AlertTriangle size={10} /> Sin GPS
                         </span>
                     )}
-                    <span className="text-xs text-slate-400">Cuota: S/{cliente.dailyQuota}</span>
+                    <span className="text-xs text-slate-400">Cuota: S/{Number(cliente.dailyQuota).toFixed(2)}</span>
                 </div>
               </div>
 
-              {/* 3. PRIORIDAD MANUAL (Solo si está seleccionado) */}
               {cliente.selected && (
                   <div className="flex flex-col items-center gap-1 border-l pl-3 border-slate-100 dark:border-zinc-800">
                       <span className="text-[9px] font-bold text-slate-400 uppercase">Orden</span>
@@ -255,7 +218,6 @@ const GestionarRuta = () => {
           ))}
       </div>
 
-      {/* BOTÓN FLOTANTE GUARDAR */}
       <div className="fixed bottom-6 left-0 w-full px-4 z-30">
         <button 
           onClick={handleGuardarRuta}
@@ -271,7 +233,6 @@ const GestionarRuta = () => {
           {countSeleccionados > 0 ? `GUARDAR RUTA (${countSeleccionados})` : 'SELECCIONA CLIENTES'}
         </button>
       </div>
-
     </div>
   );
 };

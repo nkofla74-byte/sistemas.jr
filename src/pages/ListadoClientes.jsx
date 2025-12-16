@@ -1,29 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Search, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Search, ChevronRight, User } from 'lucide-react';
+import { supabase } from '../supabase/client'; // Importar cliente Supabase
 
 const ListadoClientes = () => {
   const navigate = useNavigate();
   const [busqueda, setBusqueda] = useState('');
-  const [clientes, setClientes] = useState([]); // Estado para la lista
+  const [clientes, setClientes] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // DATOS BASE (Los antiguos simulados)
-  const datosBase = [
-    { id: 1, nombre: 'María Gómez', estado: 'active', deuda: 1200, ultimoPago: 'Ayer' },
-    { id: 2, nombre: 'Juan Pérez', estado: 'active', deuda: 800, ultimoPago: 'Hoy' },
-    { id: 3, nombre: 'Bodega El Chavo', estado: 'mora', deuda: 3000, ultimoPago: 'Hace 3 días' },
-    { id: 4, nombre: 'Carlos Ruiz', estado: 'active', deuda: 500, ultimoPago: 'Hoy' },
-    { id: 5, nombre: 'Ana Torres', estado: 'paid', deuda: 0, ultimoPago: 'Finalizado' },
-  ];
-
-  // EFECTO: Cargar datos al iniciar
+  // EFECTO: Cargar datos REALES de Supabase
   useEffect(() => {
-    // 1. Leer los nuevos del navegador
-    const nuevosClientes = JSON.parse(localStorage.getItem('nuevos_clientes') || '[]');
-    
-    // 2. Unir los base + los nuevos
-    // Ponemos los nuevos primero para verlos arriba
-    setClientes([...nuevosClientes, ...datosBase]);
+    const fetchClientes = async () => {
+      try {
+        // Obtenemos clientes y sus créditos relacionados
+        const { data, error } = await supabase
+          .from('clientes')
+          .select('*, creditos(saldo_pendiente, estado)');
+        
+        if (error) throw error;
+        
+        // Formateamos los datos para la vista
+        const clientesFormateados = data.map(c => {
+          // Tomamos el primer crédito activo o el último registrado
+          const creditoActivo = c.creditos && c.creditos.length > 0 ? c.creditos[0] : null;
+          return {
+            id: c.id,
+            nombre: c.nombre,
+            estado: creditoActivo ? creditoActivo.estado : 'active', // Estado por defecto
+            deuda: creditoActivo ? creditoActivo.saldo_pendiente : 0,
+            ultimoPago: 'N/A' // Esto se podría mejorar consultando pagos
+          };
+        });
+
+        setClientes(clientesFormateados);
+      } catch (error) {
+        console.error("Error cargando clientes:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchClientes();
   }, []);
 
   const clientesFiltrados = clientes.filter(c => 
@@ -61,7 +79,9 @@ const ListadoClientes = () => {
 
       {/* LISTA DE CLIENTES */}
       <div className="px-4 space-y-3">
-        {clientesFiltrados.length === 0 ? (
+        {loading ? (
+           <div className="text-center py-10 text-slate-400">Cargando cartera...</div>
+        ) : clientesFiltrados.length === 0 ? (
           <div className="text-center py-10 text-slate-400">
             No se encontraron clientes.
           </div>
@@ -69,29 +89,23 @@ const ListadoClientes = () => {
           clientesFiltrados.map((cliente) => (
             <div 
               key={cliente.id}
-              onClick={() => console.log('Ir a detalle', cliente)}
               className="bg-white dark:bg-zinc-900 border border-slate-100 dark:border-zinc-800 p-4 rounded-xl flex justify-between items-center active:bg-slate-50 dark:active:bg-zinc-800 transition-colors shadow-sm group"
             >
               <div className="flex gap-3 items-center">
-                {/* Avatar */}
-                <div className={`h-10 w-10 rounded-full flex items-center justify-center font-bold text-sm uppercase
-                  ${cliente.estado === 'mora' ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400' : 
-                    cliente.estado === 'paid' ? 'bg-slate-100 dark:bg-slate-800 text-slate-400' : 
-                    'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400'}`}
-                >
+                <div className="h-10 w-10 rounded-full bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold text-sm uppercase">
                   {cliente.nombre.charAt(0)}
                 </div>
 
                 <div>
-                  <h3 className={`font-bold text-sm ${cliente.estado === 'paid' ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`}>
+                  <h3 className="font-bold text-sm text-slate-800 dark:text-white">
                     {cliente.nombre}
                   </h3>
                   <div className="flex items-center gap-2 text-xs">
-                    <span className={`font-medium ${cliente.estado === 'mora' ? 'text-red-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
-                      S/ {typeof cliente.deuda === 'number' ? cliente.deuda.toFixed(2) : cliente.deuda}
+                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
+                      S/ {Number(cliente.deuda).toFixed(2)}
                     </span>
                     <span className="text-slate-300 dark:text-zinc-600">•</span>
-                    <span className="text-slate-500 dark:text-zinc-400">{cliente.ultimoPago}</span>
+                    <span className="text-slate-500 dark:text-zinc-400">Deuda actual</span>
                   </div>
                 </div>
               </div>
