@@ -1,0 +1,16 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Estilos globales para que parezca App Móvil */
+body {
+  background-color: #f8fafc; /* Gris muy suave de fondo */
+  font-family: system-ui, -apple-system, sans-serif;
+  -webkit-tap-highlight-color: transparent; /* Quita el brillo azul al tocar en móviles */
+}
+
+/* Ocultar barra de scroll para estética limpia */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
+}
