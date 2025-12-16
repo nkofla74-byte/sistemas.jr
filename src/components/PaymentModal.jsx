@@ -1,122 +1,152 @@
-import React, { useState, useEffect } from 'react';
-import { X, DollarSign, Send, Zap, MessageCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { X, DollarSign, Send, CheckCircle, ArrowRight, Lock, Edit3 } from 'lucide-react';
 
-const PaymentModal = ({ client, onClose, onPaymentConfirmed }) => {
-  // Estado para simular el monto a pagar y el pago real
-  const [paymentAmount, setPaymentAmount] = useState(client ? client.cuota : 0);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const [success, setSuccess] = useState(false);
-
-  useEffect(() => {
-    // Si el cliente cambia, actualiza el monto por defecto
-    if (client) {
-      setPaymentAmount(client.cuota);
-      setSuccess(false);
-    }
-  }, [client]);
-
+// Recibimos 'initialMode'
+const PaymentModal = ({ client, onClose, initialMode = 'normal' }) => {
   if (!client) return null;
 
-  const handleConfirmPayment = () => {
-    setIsConfirming(true);
-    // SIMULACIÓN DE PROCESO DE PAGO
-    setTimeout(() => {
-      setIsConfirming(false);
-      setSuccess(true);
-      // Llama a la función que actualiza la lista de ruta
-      onPaymentConfirmed(client.id); 
-    }, 1000); 
+  const nombre = client.name || "Cliente";
+  const cuotaSugerida = Number(client.dailyQuota || client.cuota || 0);
+  const saldoActual = Number(client.debt || 0);
+
+  const [amount, setAmount] = useState(cuotaSugerida);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState(false);
+  const [sistemaAbierto, setSistemaAbierto] = useState(true);
+  
+  // Si initialMode es 'edit', arrancamos editando
+  const [isEditable, setIsEditable] = useState(initialMode === 'edit');
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    verificarHorario();
+    const interval = setInterval(verificarHorario, 60000);
+    
+    // Si abrimos en modo edición, enfocar el input
+    if (initialMode === 'edit' && inputRef.current) {
+        setTimeout(() => inputRef.current.focus(), 100);
+    }
+
+    return () => clearInterval(interval);
+  }, [initialMode]);
+
+  const verificarHorario = () => {
+    const ahora = new Date();
+    const hora = ahora.getHours(); 
+    const abierto = hora >= 5 && hora < 19; 
+    setSistemaAbierto(abierto);
   };
 
-  const handleWhatsApp = () => {
-    const message = `Hola ${client.name}, acabo de registrar tu pago por $${paymentAmount.toFixed(2)}. Tu saldo actual pendiente es de $XXX. ¡Gracias por tu puntualidad!`;
-    const whatsappUrl = `https://wa.me/51999999999?text=${encodeURIComponent(message)}`;
-    
-    // Abrir WhatsApp en una nueva pestaña (simulación de número)
-    window.open(whatsappUrl, '_blank');
+  const handleActivarEdicion = () => {
+    if (!sistemaAbierto) return alert("⛔ SISTEMA CERRADO");
+    setIsEditable(true);
+    setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 100);
+  };
+
+  const handleCobrar = () => {
+    if (!sistemaAbierto) return alert("⛔ SISTEMA CERRADO");
+    setIsProcessing(true);
+    setTimeout(() => {
+      setIsProcessing(false);
+      setPaymentSuccess(true);
+    }, 1500);
+  };
+
+  const handleEnviarComprobante = () => {
+    const montoPagado = Number(amount);
+    const nuevoSaldo = saldoActual - montoPagado;
+    const fecha = new Date().toLocaleDateString();
+    const mensaje = `🧾 *COMPROBANTE PAGO*\n📅 ${fecha}\n👤 ${nombre}\n💰 *PAGO:* S/ ${montoPagado.toFixed(2)}\n📉 *SALDO:* S/ ${nuevoSaldo.toFixed(2)}`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(mensaje)}`, '_blank');
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-[100] flex items-end sm:items-center justify-center">
-      
-      <div className="bg-white w-full max-w-md rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl transform transition-all duration-300">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-zinc-900 w-full sm:max-w-md rounded-t-3xl sm:rounded-3xl shadow-2xl p-6 border border-zinc-800 animate-slide-up transition-all relative">
         
-        {/* Encabezado y Botón de Cierre */}
-        <div className="flex justify-between items-center border-b pb-3 mb-4">
-          <h2 className="text-xl font-bold text-gray-800 flex items-center">
-            <DollarSign size={20} className="mr-2 text-green-600" /> 
-            Registrar Cobro
-          </h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-            <X size={24} />
+        {!sistemaAbierto && <div className="absolute top-0 left-0 w-full h-1.5 bg-red-600 z-10 animate-pulse" />}
+
+        <div className="flex justify-between items-center mb-6">
+          <div>
+            <h2 className="text-xl font-bold text-white flex items-center gap-2">
+              {paymentSuccess ? '¡Pago Registrado!' : 'Registrar Pago'}
+              {!sistemaAbierto && <Lock size={16} className="text-red-500" />}
+            </h2>
+            <p className="text-sm text-zinc-400">Cliente: {nombre}</p>
+          </div>
+          <button onClick={onClose} className="p-2 bg-zinc-800 rounded-full text-zinc-400 hover:bg-zinc-700">
+            <X size={20} />
           </button>
         </div>
 
-        {/* Detalles del Cliente */}
-        <div className="mb-6 bg-blue-50 p-4 rounded-lg">
-          <p className="text-sm text-gray-600">Cliente:</p>
-          <p className="font-extrabold text-lg text-blue-800">{client.name}</p>
-          <p className="text-sm text-gray-500">Cuota del día: <span className="font-bold text-base text-green-700">$ {client.cuota.toFixed(2)}</span></p>
-        </div>
-        
-        {/* Cuerpo del Pago */}
-        {!success ? (
-          <>
-            <div className="mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Monto Pagado ({client.currency || 'PEN'})</label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full text-center text-3xl font-bold p-4 border-2 border-green-500 rounded-xl focus:ring-green-500 focus:border-green-500 transition-colors"
+        {!paymentSuccess ? (
+          <div className="animate-fade-in">
+            <div className="mb-6 text-center">
+              <label className="block text-xs font-bold text-zinc-500 uppercase mb-3">
+                {isEditable ? 'Escribe el nuevo monto' : 'Monto a cobrar'}
+              </label>
+              
+              <div className="relative inline-block w-full">
+                <DollarSign className={`absolute left-6 top-1/2 -translate-y-1/2 transition-colors ${isEditable ? 'text-emerald-500' : 'text-zinc-600'}`} size={28} />
+                <input 
+                  ref={inputRef}
+                  type="number" 
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  disabled={!isEditable} 
+                  className={`w-full border rounded-2xl py-5 pl-14 pr-4 text-5xl font-bold text-center outline-none transition-all
+                    ${!sistemaAbierto ? 'bg-black border-red-900 text-zinc-600' : 
+                      isEditable ? 'bg-black border-emerald-500 text-white ring-2 ring-emerald-500/30' : 
+                      'bg-zinc-950 border-zinc-800 text-zinc-300'
+                    }
+                  `}
                 />
-                <button 
-                    onClick={() => setPaymentAmount(client.cuota)}
-                    className="absolute right-2 top-1/2 transform -translate-y-1/2 text-sm bg-gray-100 p-2 rounded-lg text-gray-600 font-semibold"
-                >
-                    Cuota Fija
-                </button>
               </div>
-              <p className="mt-2 text-xs text-gray-500 flex items-center"><Zap size={14} className="mr-1 text-yellow-600" /> Cambia el monto si el cliente paga extra o menos.</p>
+
+              <div className="mt-4 flex justify-center gap-3 text-xs">
+                <span className="bg-emerald-900/30 text-emerald-400 border border-emerald-900/50 px-3 py-1.5 rounded-lg font-bold">Cuota: S/ {cuotaSugerida.toFixed(2)}</span>
+                <span className="bg-zinc-800 text-zinc-400 border border-zinc-700 px-3 py-1.5 rounded-lg font-bold">Saldo: S/ {saldoActual.toFixed(2)}</span>
+              </div>
             </div>
-          
-            {/* Botón de Confirmación */}
-            <button
-              onClick={handleConfirmPayment}
-              disabled={isConfirming || paymentAmount <= 0}
-              className={`w-full py-4 rounded-xl text-white font-extrabold text-lg transition-colors shadow-lg
-                ${paymentAmount > 0 ? 'bg-green-600 hover:bg-green-700 shadow-green-500/30' : 'bg-gray-400 cursor-not-allowed'}
-              `}
+
+            <button 
+                onClick={handleCobrar}
+                disabled={isProcessing || !amount || !sistemaAbierto}
+                className={`w-full py-4 font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all text-lg mb-3
+                  ${!sistemaAbierto ? 'bg-zinc-800 text-zinc-500' : 'bg-emerald-600 hover:bg-emerald-500 text-white active:scale-95'}
+                `}
             >
-              {isConfirming ? 'Procesando...' : 'CONFIRMAR PAGO'}
+                {isProcessing ? 'Procesando...' : !sistemaAbierto ? 'BLOQUEADO' : <><CheckCircle size={24} /> CONFIRMAR COBRO</>}
             </button>
-          </>
-        ) : (
-          /* Vista de Éxito (Recibo) */
-          <div className="text-center py-8">
-            <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Zap size={32} />
-            </div>
-            <h3 className="text-2xl font-bold text-gray-800">¡Pago Registrado!</h3>
-            <p className="text-gray-500 mb-6">Se cobraron $ {paymentAmount.toFixed(2)}</p>
+
+            {/* BOTÓN DE RESPALDO PARA MODIFICAR (Solo visible si no está editando) */}
+            {!isEditable && sistemaAbierto && (
+              <button 
+                onClick={handleActivarEdicion}
+                className="w-full py-3 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 font-bold rounded-xl flex items-center justify-center gap-2 transition-colors border border-zinc-700"
+              >
+                <Edit3 size={18} />
+                MODIFICAR MANUALMENTE
+              </button>
+            )}
             
-            <button
-                onClick={handleWhatsApp}
-                className="w-full py-3 rounded-xl text-white font-bold text-lg transition-colors bg-green-500 hover:bg-green-600 flex items-center justify-center shadow-lg shadow-green-500/30"
-            >
-                <MessageCircle size={20} className="mr-2" />
-                Enviar Recibo por WhatsApp
-            </button>
-            <button
-                onClick={onClose}
-                className="w-full py-3 mt-3 rounded-xl text-gray-600 font-bold text-lg hover:bg-gray-100 transition-colors"
-            >
-                Volver a la Ruta
-            </button>
+            {isEditable && (
+              <button onClick={() => { setIsEditable(false); setAmount(cuotaSugerida); }} className="w-full py-3 text-zinc-500 hover:text-white text-sm">Cancelar edición</button>
+            )}
+          </div>
+        ) : (
+          /* FASE ÉXITO */
+          <div className="text-center animate-scale-in py-2">
+            <div className="w-20 h-20 bg-emerald-500/10 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-3 border-4 border-emerald-500/20">
+              <CheckCircle size={40} strokeWidth={3} />
+            </div>
+            <h3 className="text-3xl font-bold text-white mb-6">S/ {Number(amount).toFixed(2)}</h3>
+            <div className="space-y-3">
+              <button onClick={handleEnviarComprobante} className="w-full py-3.5 bg-green-600 text-white font-bold rounded-xl flex items-center justify-center gap-2 shadow-lg active:scale-95"><Send size={20} /> ENVIAR RECIBO</button>
+              <button onClick={onClose} className="w-full py-3.5 bg-zinc-800 text-zinc-300 font-bold rounded-xl flex items-center justify-center gap-2">TERMINAR <ArrowRight size={18} /></button>
+            </div>
           </div>
         )}
-        
       </div>
     </div>
   );
