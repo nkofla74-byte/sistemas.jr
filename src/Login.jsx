@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { supabase } from './supabase/client';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -8,76 +9,78 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
 
-    // SIMULACIÓN DE BACKEND (Para que pruebes las 3 interfaces)
-    // En el futuro, esto se validará con Supabase real.
-    setTimeout(() => {
-      setLoading(false);
+    try {
+      // 1. AUTENTICACIÓN REAL CON SUPABASE
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      // 2. LÓGICA DE REDIRECCIÓN (ROLES)
+      // En el futuro esto vendrá de la base de datos (tabla 'perfiles').
+      // Por ahora, lo hacemos verificando el correo:
       
-      if (email === 'admin@sistema.com') {
-        // Rol 1: Dueño del SaaS
-        navigate('/super-admin');
-      } else if (email === 'oficina@sistema.com') {
-        // Rol 2: Administrador de Oficina
-        navigate('/admin-oficina');
-      } else if (email === 'cobrador@sistema.com') {
-        // Rol 3: Cobrador / Ruta
-        navigate('/cobrador');
+      const userEmail = data.user.email;
+
+      if (userEmail === 'admin@sistema.com') {
+        // El dueño va al panel administrativo
+        navigate('/admin');
+      } else if (userEmail === 'oficina@sistema.com') {
+        // El encargado también usa panel de escritorio (podríamos crear /admin/oficina luego)
+        navigate('/admin'); 
       } else {
-        setError('Credenciales de prueba no reconocidas. Intenta con: admin@sistema.com');
+        // Los cobradores (y otros) van a la App Móvil
+        navigate('/');
       }
-    }, 1000);
+      
+    } catch (err) {
+      setError('Error de acceso: Credenciales inválidas');
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8">
-      {/* CARD PRINCIPAL: Ancho completo en móvil, restringido en PC */}
-      <div className="max-w-md w-full space-y-8 bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 sm:px-6 lg:px-8 dark:bg-zinc-900 transition-colors">
+      <div className="max-w-md w-full space-y-8 bg-white dark:bg-zinc-800 p-8 rounded-2xl shadow-xl border border-gray-100 dark:border-zinc-700">
         
-        {/* CABECERA */}
         <div className="text-center">
-          <h2 className="mt-2 text-3xl font-extrabold text-gray-900">
+          <div className="mx-auto h-12 w-12 bg-emerald-600 rounded-lg flex items-center justify-center text-white font-bold text-xl mb-4">
+            JR
+          </div>
+          <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white">
             Sistema JR
           </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            Ingresa a tu cuenta para gestionar créditos
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            Ingresa tus credenciales
           </p>
         </div>
 
-        {/* FORMULARIO */}
         <form className="mt-8 space-y-6" onSubmit={handleLogin}>
-          <div className="rounded-md shadow-sm space-y-4">
-            
-            {/* Input Email */}
+          <div className="rounded-md space-y-4">
             <div>
-              <label htmlFor="email-address" className="sr-only">Correo electrónico</label>
               <input
-                id="email-address"
-                name="email"
                 type="email"
-                autoComplete="email"
                 required
-                className="input-base" // Usamos la clase global que creamos
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                 placeholder="Correo electrónico"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
             </div>
-            
-            {/* Input Password */}
             <div>
-              <label htmlFor="password" className="sr-only">Contraseña</label>
               <input
-                id="password"
-                name="password"
                 type="password"
-                autoComplete="current-password"
                 required
-                className="input-base"
+                className="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-zinc-600 bg-white dark:bg-zinc-900 text-gray-900 dark:text-white focus:ring-2 focus:ring-emerald-500 outline-none transition-all"
                 placeholder="Contraseña"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -85,45 +88,26 @@ export default function Login() {
             </div>
           </div>
 
-          {/* Mensaje de Error */}
           {error && (
-            <div className="text-red-500 text-sm text-center bg-red-50 p-2 rounded-lg">
+            <div className="text-red-500 text-sm text-center bg-red-50 dark:bg-red-900/20 p-2 rounded-lg border border-red-100 dark:border-red-900">
               {error}
             </div>
           )}
 
-          {/* Botón de Acción */}
-          <div>
-            <button
-              type="submit"
-              disabled={loading}
-              className={`btn-primary w-full flex justify-center ${loading ? 'opacity-70 cursor-not-allowed' : ''}`}
-            >
-              {loading ? (
-                <span className="flex items-center">
-                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Ingresando...
-                </span>
-              ) : (
-                'Iniciar Sesión'
-              )}
-            </button>
-          </div>
-
-          {/* Ayuda visual para desarrollo (puedes borrar esto después) */}
-          <div className="mt-4 p-3 bg-indigo-50 rounded-lg text-xs text-indigo-800">
-            <p className="font-bold mb-1">Usuarios de prueba:</p>
-            <ul className="list-disc pl-4 space-y-1">
-              <li onClick={() => setEmail('admin@sistema.com')} className="cursor-pointer hover:underline">Dueño: admin@sistema.com</li>
-              <li onClick={() => setEmail('oficina@sistema.com')} className="cursor-pointer hover:underline">Oficina: oficina@sistema.com</li>
-              <li onClick={() => setEmail('cobrador@sistema.com')} className="cursor-pointer hover:underline">Cobrador: cobrador@sistema.com</li>
-            </ul>
-          </div>
-
+          <button
+            type="submit"
+            disabled={loading}
+            className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg shadow-emerald-500/30 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? 'Verificando...' : 'Iniciar Sesión'}
+          </button>
         </form>
+
+        {/* AYUDA VISUAL (Opcional, bórralo cuando termines de probar) */}
+        <div className="text-xs text-center text-gray-400 mt-4">
+          <p>Usuarios sugeridos (Crear en Supabase):</p>
+          <p>admin@sistema.com / oficina@sistema.com / cobrador@sistema.com</p>
+        </div>
       </div>
     </div>
   );
