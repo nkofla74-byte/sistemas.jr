@@ -2,15 +2,97 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Estilos globales para que parezca App Móvil */
-body {
-  background-color: #f8fafc; /* Gris muy suave de fondo */
-  font-family: system-ui, -apple-system, sans-serif;
-  -webkit-tap-highlight-color: transparent; /* Quita el brillo azul al tocar en móviles */
+/* =========================================
+   CONFIGURACIÓN GLOBAL (Mobile First)
+   ========================================= */
+
+:root {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  /* Esquema de colores base */
+  color-scheme: light;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Ocultar barra de scroll para estética limpia */
+/* =========================================
+   ESTILOS DEL BODY
+   ========================================= */
+
+body {
+  margin: 0;
+  padding: 0;
+  /* Ancho mínimo y altura mínima para ocupar toda la pantalla */
+  min-width: 320px;
+  min-height: 100vh;
+  
+  /* Color de fondo suave (reduce fatiga visual en móviles) */
+  @apply bg-gray-50 text-gray-900;
+  
+  /* Evita scroll horizontal accidental en móviles */
+  overflow-x: hidden;
+}
+
+/* =========================================
+   MEJORAS PARA MÓVILES (App-like feel)
+   ========================================= */
+
+/* Elimina el color de resaltado al tocar (tap) en móviles (iOS/Android) */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Mejora el scroll en contenedores largos */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Estiliza la barra de scroll para que sea más elegante (opcional, estilo moderno) */
 ::-webkit-scrollbar {
-  width: 0px;
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
   background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* =========================================
+   CLASES UTILITARIAS PERSONALIZADAS
+   ========================================= */
+
+@layer components {
+  /* Botón Base adaptable: 
+     - Ancho completo en móvil
+     - Tamaño automático en desktop (sm:) 
+  */
+  .btn-primary {
+    @apply w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors;
+  }
+
+  /* Input Base adaptable:
+     - Texto legible (text-base) para evitar zoom en iPhone
+  */
+  .input-base {
+    @apply w-full px-4 py-3 rounded-lg border border-gray-300 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none transition-shadow text-base;
+  }
+
+  /* Tarjeta Base:
+     - Sombra suave y bordes redondeados
+  */
+  .card-base {
+    @apply bg-white p-6 rounded-xl shadow-sm border border-gray-100;
+  }
 }

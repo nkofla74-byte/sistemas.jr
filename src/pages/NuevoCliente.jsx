@@ -5,23 +5,23 @@ import {
   MapPin, Send, ShieldCheck, CheckCircle, XCircle, 
   Calculator, Calendar, TrendingUp, CreditCard, Camera, Save
 } from 'lucide-react';
+import { supabase } from '../supabase/client'; // <--- CONEXIÓN A SUPABASE
 
 const NuevoCliente = () => {
   const navigate = useNavigate();
 
   // --- CONFIGURACIÓN ---
-  // ⚠️ REEMPLAZAR CON TU NÚMERO REAL (Código país + número)
-  // Ej: Colombia "57300...", Perú "519..."
-  const ADMIN_PHONE = "573122339294"; 
+  // Reemplaza con tu número real si no lo has hecho
+  const ADMIN_PHONE = "573001234567"; 
 
   // --- ESTADOS ---
   const [step, setStep] = useState(1);
   const [loadingGPS, setLoadingGPS] = useState(false);
-  const [isSaving, setIsSaving] = useState(false); // Estado de carga al guardar
+  const [isSaving, setIsSaving] = useState(false); // Estado de carga (Spinner)
   const [searchDni, setSearchDni] = useState('');
   const [clientStatus, setClientStatus] = useState(null);
   
-  // Validaciones del flujo WhatsApp
+  // Validaciones del flujo
   const [whatsappOpened, setWhatsappOpened] = useState(false);
   const [evidenceConfirmed, setEvidenceConfirmed] = useState(false);
   
@@ -33,7 +33,7 @@ const NuevoCliente = () => {
 
   const [calculo, setCalculo] = useState({ totalPagar: 0, cuotaDiaria: 0, ganancia: 0 });
 
-  // --- MOCK DB (Simulación de Buro de Crédito) ---
+  // --- MOCK DB (Buro de Crédito Simulado) ---
   const mockDB = [
     { dni: '12345678', nombre: 'Juan "Mala Paga" Pérez', status: 'risk' },
     { dni: '87654321', nombre: 'María Gómez', status: 'clean' },
@@ -79,7 +79,7 @@ const NuevoCliente = () => {
 
   const handleChange = (e) => setForm({ ...form, [e.target.name]: e.target.value });
 
-  // 3. Abrir WhatsApp con datos precargados
+  // 3. Abrir WhatsApp con datos
   const handleOpenWhatsApp = () => {
     if (!form.gps) return alert("Primero captura la ubicación GPS");
 
@@ -107,37 +107,61 @@ const NuevoCliente = () => {
     setWhatsappOpened(true);
   };
 
-  // 4. GUARDAR CRÉDITO (Persistencia en LocalStorage)
-  const handleCrearCredito = () => {
+  // 4. GUARDAR CRÉDITO EN SUPABASE (LÓGICA ACTUALIZADA)
+  const handleCrearCredito = async () => {
     setIsSaving(true);
 
-    setTimeout(() => {
-      // A. Crear el objeto del nuevo cliente
-      const nuevoCliente = {
-        id: Date.now(), // ID único
-        nombre: form.nombre,
-        dni: form.dni,
-        telefono: form.telefono,
-        direccion: form.direccion,
-        estado: 'active',
-        deuda: calculo.totalPagar,
-        cuota: calculo.cuotaDiaria,
-        ultimoPago: 'Reciente',
-        fechaInicio: new Date().toLocaleDateString()
-      };
+    try {
+        // A. Insertar el CLIENTE en la tabla 'clientes'
+        const { data: clienteData, error: clienteError } = await supabase
+            .from('clientes')
+            .insert([
+                {
+                    nombre: form.nombre,
+                    dni: form.dni,
+                    telefono: form.telefono,
+                    direccion: form.direccion,
+                    gps: form.gps, // Se guarda como JSON
+                    estado: 'active' // Cliente nace activo
+                }
+            ])
+            .select() // Pedimos que nos devuelva el registro creado
+            .single();
 
-      // B. Guardar en memoria del navegador
-      const clientesGuardados = JSON.parse(localStorage.getItem('nuevos_clientes') || '[]');
-      clientesGuardados.push(nuevoCliente);
-      localStorage.setItem('nuevos_clientes', JSON.stringify(clientesGuardados));
-      
-      console.log("Cliente guardado:", nuevoCliente);
-      
-      alert("✅ ¡CRÉDITO CREADO CON ÉXITO!\nEl cliente ha sido registrado correctamente.");
-      
-      setIsSaving(false);
-      navigate('/listado-general'); // Redirigir al listado
-    }, 2000);
+        if (clienteError) throw clienteError;
+
+        // B. Insertar el CRÉDITO vinculado al cliente
+        // Usamos clienteData.id para vincularlo
+        const { error: creditoError } = await supabase
+            .from('creditos')
+            .insert([
+                {
+                    cliente_id: clienteData.id,
+                    monto_prestado: parseFloat(form.monto),
+                    interes: parseFloat(form.interes),
+                    monto_total: calculo.totalPagar,
+                    saldo_pendiente: calculo.totalPagar,
+                    cuota_diaria: calculo.cuotaDiaria,
+                    cuotas_totales: parseInt(form.dias),
+                    cuotas_pagadas: 0,
+                    estado: 'activo'
+                }
+            ]);
+
+        if (creditoError) throw creditoError;
+
+        // C. Éxito
+        console.log("Cliente y Crédito creados en Supabase");
+        alert("✅ ¡CRÉDITO GUARDADO EN LA NUBE!\nEl cliente ya está registrado en la base de datos.");
+        
+        setIsSaving(false);
+        navigate('/listado-general'); // Volvemos al listado
+
+    } catch (error) {
+        console.error("Error Supabase:", error);
+        alert("❌ Ocurrió un error al guardar: " + error.message);
+        setIsSaving(false);
+    }
   };
 
   return (
@@ -278,7 +302,7 @@ const NuevoCliente = () => {
                 </button>
               </div>
 
-              {/* INSTRUCCIONES CLARAS DE FOTOS */}
+              {/* INSTRUCCIONES */}
               <div className="bg-blue-100 dark:bg-blue-900/30 p-3 rounded-lg border border-blue-200 dark:border-blue-800">
                 <p className="text-xs font-bold text-blue-800 dark:text-blue-300 mb-2 flex items-center gap-1">
                   <Camera size={14} /> FOTOS OBLIGATORIAS POR WHATSAPP:
@@ -321,7 +345,7 @@ const NuevoCliente = () => {
               )}
             </section>
 
-            {/* BOTÓN FINAL */}
+            {/* BOTÓN FINAL CON SUPABASE */}
             <button 
               onClick={handleCrearCredito}
               disabled={!evidenceConfirmed || isSaving}
@@ -334,7 +358,7 @@ const NuevoCliente = () => {
               {isSaving ? (
                 <>
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  PROCESANDO...
+                  GUARDANDO EN NUBE...
                 </>
               ) : (
                 <>
