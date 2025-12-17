@@ -11,30 +11,41 @@ import Login from './Login';
 import Home from './pages/Home';
 import Ruta from './pages/Ruta';
 import Clientes from './pages/Clientes';
-import Perfil from './pages/Perfil'; // Importación agregada
+import Perfil from './pages/Perfil';
 
 // --- PAGES (Funcionalidades del Cobrador) ---
-import GestionarRuta from './pages/GestionarRuta'; // Importación agregada
-import ListadoClientes from './pages/ListadoClientes'; // Importación agregada
-import NuevoCliente from './pages/NuevoCliente'; // Importación agregada
+import GestionarRuta from './pages/GestionarRuta';
+import ListadoClientes from './pages/ListadoClientes';
+import NuevoCliente from './pages/NuevoCliente';
 
 // --- PAGES (Vistas Administrativas) ---
 import CrearUsuario from './pages/admin/CrearUsuario';
 import AdminDashboard from './pages/admin/Dashboard';
 
-// --- COMPONENTE DE PROTECCIÓN DE RUTA ---
-const ProtectedRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+// --- COMPONENTE DE PROTECCIÓN DE RUTA MEJORADO ---
+const ProtectedRoute = ({ children, allowedRoles }) => {
+  const { user, profile, loading } = useAuth();
   
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-zinc-900">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
       </div>
     );
   }
 
+  // 1. Si no está logueado, mandar al login
   if (!user) return <Navigate to="/login" replace />;
+
+  // 2. Si la ruta requiere roles específicos y el usuario no tiene el rol adecuado
+  if (allowedRoles && profile && !allowedRoles.includes(profile.role)) {
+    // Redirigir a la home de su rol correspondiente para evitar bucles
+    if (profile.role === 'cobrador') {
+      return <Navigate to="/" replace />;
+    } else {
+      return <Navigate to="/admin" replace />;
+    }
+  }
   
   return children;
 };
@@ -50,9 +61,9 @@ function App() {
             {/* 1. LOGIN (Público) */}
             <Route path="/login" element={<Login />} />
 
-            {/* 2. ZONA ADMIN (Escritorio) */}
+            {/* 2. ZONA ADMIN (Escritorio) - Protegida por Rol */}
             <Route path="/admin" element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['super-admin', 'admin-oficina']}>
                 <AdminLayout title="Panel de Control" role="Administrador" />
               </ProtectedRoute>
             }>
@@ -60,9 +71,9 @@ function App() {
                <Route path="crear-usuario" element={<CrearUsuario />} />
             </Route>
 
-            {/* 3. ZONA COBRADOR (Móvil) */}
+            {/* 3. ZONA COBRADOR (Móvil) - Protegida por Rol */}
             <Route element={
-              <ProtectedRoute>
+              <ProtectedRoute allowedRoles={['cobrador', 'super-admin', 'admin-oficina']}>
                 <CobradorLayout />
               </ProtectedRoute>
             }>
@@ -70,18 +81,11 @@ function App() {
               <Route path="/ruta" element={<Ruta />} />
               <Route path="/clientes" element={<Clientes />} />
               
-              {/* --- RUTAS CORREGIDAS --- */}
-              {/* Planificador de rutas */}
+              {/* Funcionalidades */}
               <Route path="/enrutar" element={<GestionarRuta />} />
-              
-              {/* Cartera de Clientes */}
               <Route path="/listado-general" element={<ListadoClientes />} />
-              
-              {/* Creación de Clientes y Créditos (Usamos el mismo componente) */}
               <Route path="/clientes/crear" element={<NuevoCliente />} />
               <Route path="/creditos/nuevo" element={<NuevoCliente />} />
-              
-              {/* Perfil */}
               <Route path="/perfil" element={<Perfil />} />
             </Route>
 

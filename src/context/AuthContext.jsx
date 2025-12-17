@@ -1,46 +1,71 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { supabase } from '../supabase/client';
 
 const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null); // Aquí guardamos si es 'admin' o 'cobrador'
+  const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
 
+  // Función para obtener perfil
+  const fetchProfile = useCallback(async (userId) => {
+    try {
+      console.log("📥 Descargando perfil para:", userId);
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userId)
+        .maybeSingle();
+
+      if (error) {
+        console.warn("⚠️ Error obteniendo perfil:", error.message);
+        return null;
+      }
+      console.log("✅ Perfil descargado:", data?.role || "Sin rol");
+      return data;
+    } catch (err) {
+      console.error("❌ Error inesperado fetchProfile:", err);
+      return null;
+    }
+  }, []);
+
   useEffect(() => {
-    const getSession = async () => {
-      setLoading(true);
+    let mounted = true;
+
+    const initSession = async () => {
       try {
+        console.log("🔄 Iniciando sesión de Supabase...");
         const { data: { session } } = await supabase.auth.getSession();
         
-        if (session?.user) {
+        if (session?.user && mounted) {
+          console.log("👤 Usuario detectado:", session.user.email);
           setUser(session.user);
-          // Descargamos el rol desde la tabla que acabamos de crear en SQL
-          const { data } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', session.user.id)
-            .single();
-          setProfile(data);
+          const userProfile = await fetchProfile(session.user.id);
+          if (mounted) setProfile(userProfile);
         } else {
-          setUser(null);
-          setProfile(null);
+          console.log("⚪ No hay sesión activa.");
         }
       } catch (error) {
-        console.error("Error Auth:", error);
+        console.error("❌ Error crítico en initSession:", error);
       } finally {
-        setLoading(false);
+        if (mounted) {
+          setLoading(false);
+          console.log("🏁 Carga inicial finalizada.");
+        }
       }
     };
 
-    getSession();
+    initSession();
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
+      if (!mounted) return;
+      console.log("🔔 Cambio en estado Auth:", _event);
+
       if (session?.user) {
         setUser(session.user);
-        const { data } = await supabase.from('profiles').select('*').eq('id', session.user.id).single();
-        setProfile(data);
+        const userProfile = await fetchProfile(session.user.id);
+        if (mounted) setProfile(userProfile);
       } else {
         setUser(null);
         setProfile(null);
@@ -48,8 +73,11 @@ export const AuthProvider = ({ children }) => {
       setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
-  }, []);
+    return () => {
+      mounted = false;
+      subscription.unsubscribe();
+    };
+  }, [fetchProfile]);
 
   const signOut = async () => {
     await supabase.auth.signOut();
@@ -57,9 +85,20 @@ export const AuthProvider = ({ children }) => {
     setProfile(null);
   };
 
+  // --- SOLUCIÓN PANTALLA BLANCA ---
+  // Si está cargando, mostramos un spinner en lugar de "nada"
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 dark:bg-zinc-900">
+        <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-emerald-600 mb-4"></div>
+        <p className="text-gray-500 font-medium animate-pulse">Cargando sistema...</p>
+      </div>
+    );
+  }
+
   return (
     <AuthContext.Provider value={{ user, profile, loading, signOut }}>
-      {!loading && children}
+      {children}
     </AuthContext.Provider>
   );
 };

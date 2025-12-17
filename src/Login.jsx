@@ -1,13 +1,35 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from './supabase/client';
+import { useAuth } from './context/AuthContext';
 
 export default function Login() {
   const navigate = useNavigate();
+  const { user, profile } = useAuth(); // Usamos el contexto para verificar si ya está logueado
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Si el usuario ya está logueado y tiene perfil, redirigir automáticamente
+  useEffect(() => {
+    if (user && profile) {
+      redirectBasedOnRole(profile.role);
+    }
+  }, [user, profile]);
+
+  const redirectBasedOnRole = (role) => {
+    switch (role) {
+      case 'super-admin':
+      case 'admin-oficina':
+        navigate('/admin');
+        break;
+      case 'cobrador':
+      default:
+        navigate('/');
+        break;
+    }
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -15,7 +37,7 @@ export default function Login() {
     setLoading(true);
 
     try {
-      // 1. Iniciar sesión en Supabase Auth
+      // 1. Iniciar sesión
       const { data: { user }, error: authError } = await supabase.auth.signInWithPassword({
         email,
         password,
@@ -23,34 +45,27 @@ export default function Login() {
 
       if (authError) throw authError;
 
-      // 2. Verificar el ROL en la tabla 'profiles'
-      const { data: profile, error: profileError } = await supabase
+      // 2. Obtener rol manualmente una vez para redirección inmediata
+      // (AuthContext también lo hará, pero esto acelera la UX)
+      const { data: userProfile, error: profileError } = await supabase
         .from('profiles')
         .select('role')
         .eq('id', user.id)
-        .single();
+        .maybeSingle();
 
-      if (profileError) throw new Error("No se pudo verificar el rol del usuario.");
-
-      // 3. Redirección Inteligente
-      switch (profile.role) {
-        case 'super-admin':
-          // El Dueño va al Dashboard completo
-          navigate('/admin');
-          break;
-        case 'admin-oficina':
-          // El Admin de Oficina también va al panel (podrías restringir vistas luego)
-          navigate('/admin'); 
-          break;
-        case 'cobrador':
-        default:
-          // Cobradores van a la App Móvil
-          navigate('/');
-          break;
+      if (profileError) throw new Error("Error verificando permisos.");
+      
+      if (!userProfile) {
+        throw new Error("Usuario sin perfil asignado. Contacte al administrador.");
       }
+
+      // 3. Redirigir
+      redirectBasedOnRole(userProfile.role);
       
     } catch (err) {
       setError('Error de acceso: ' + (err.message || 'Credenciales inválidas'));
+      // Si falló algo después del login (ej. perfil), hacemos logout para limpiar
+      await supabase.auth.signOut();
     } finally {
       setLoading(false);
     }
